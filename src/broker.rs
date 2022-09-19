@@ -41,23 +41,24 @@ impl Broker for WebSocketBorker {
 }
 
 pub struct UdpBroker {
-    target_addr: String,
+    target_addrs: Vec<String>,
     socket: UdpSocket,
 }
 
 impl UdpBroker {
-    pub fn new(addr: String) -> UdpBroker {
+    pub fn new(target_addrs: Vec<String>) -> UdpBroker {
+        let socket = UdpSocket::bind("localhost:0").expect("Could not bind socket");
         UdpBroker {
-            target_addr: addr,
-            socket: UdpSocket::bind("localhost:0").expect("Could not bind socket"),
+            target_addrs,
+            socket,
         }
     }
 }
 
 impl Broker for UdpBroker {
     fn broadcast(&self, message: String) {
-        self.socket
-            .send_to(message.as_bytes(), &self.target_addr)
-            .expect("failed to send message");
+        for addr in &self.target_addrs {
+            self.socket.send_to(message.as_bytes(), addr).unwrap();
+        }
     }
 }
