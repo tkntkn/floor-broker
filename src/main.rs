@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use std::fs::File;
@@ -11,6 +12,69 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 
+#[async_trait]
+trait Broker {
+    async fn broadcast(&self, message: &String);
+}
+
+struct WebSocketBorker {
+    ws_streams: Arc<Mutex<Vec<SplitSink<WebSocketStream<TcpStream>, Message>>>>,
+}
+
+impl WebSocketBorker {
+    fn new(addr: String) -> WebSocketBorker {
+        let broker = WebSocketBorker {
+            ws_streams: Arc::new(Mutex::new(Vec::new())),
+        };
+        let thread_ws_streams = broker.ws_streams.clone();
+        tokio::spawn(async move {
+            let listener = TcpListener::bind(addr).await.expect("Can't listen");
+            while let Ok((stream, _)) = listener.accept().await {
+                let ws_stream = accept_async(stream).await.expect("Failed to accept");
+                let (ws_sender, _) = ws_stream.split();
+                thread_ws_streams.lock().unwrap().push(ws_sender);
+            }
+        });
+        broker
+    }
+}
+
+#[async_trait]
+impl Broker for WebSocketBorker {
+    async fn broadcast(&self, message: &String) {
+        let thread_ws_streams = self.ws_streams.clone();
+        let thread_ws_streams_iter = thread_ws_streams.lock().unwrap().iter_mut();
+        let send_futures =
+            thread_ws_streams_iter.map(|ws_stream| ws_stream.send(Message::text(message)));
+        for future in send_futures {
+            future.await;
+        }
+    }
+}
+
+struct UdpBroker {
+    target_addr: String,
+    socket: UdpSocket,
+}
+
+impl UdpBroker {
+    fn new(addr: String) -> UdpBroker {
+        UdpBroker {
+            target_addr: addr,
+            socket: UdpSocket::bind("localhost:0").expect("Could not bind socket"),
+        }
+    }
+}
+
+#[async_trait]
+impl Broker for UdpBroker {
+    async fn broadcast(&self, message: &String) {
+        self.socket
+            .send_to(message.as_bytes(), &self.target_addr)
+            .expect("failed to send message");
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();
@@ -23,21 +87,10 @@ async fn main() {
     let filename = String::from(&args[1]);
     let target_addr = String::from(&args[2]);
 
-    let ws_streams: Arc<Mutex<Vec<SplitSink<WebSocketStream<TcpStream>, Message>>>> =
-        Arc::new(Mutex::new(Vec::new()));
-    let thread_ws_streams = ws_streams.clone();
-    tokio::spawn(async move {
-        let listener = TcpListener::bind("localhost:8080")
-            .await
-            .expect("Can't listen");
-        while let Ok((stream, _)) = listener.accept().await {
-            let ws_stream = accept_async(stream).await.expect("Failed to accept");
-            let (ws_sender, _) = ws_stream.split();
-            thread_ws_streams.lock().unwrap().push(ws_sender);
-        }
-    });
-
-    let socket = UdpSocket::bind("localhost:0").expect("Could not bind socket");
+    let brokers: Vec<Box<dyn Broker>> = vec![
+        Box::new(WebSocketBorker::new("localhost:8080".to_string())),
+        Box::new(UdpBroker::new(target_addr)),
+    ];
 
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
@@ -64,11 +117,8 @@ async fn main() {
     });
 
     for data in rx {
-        socket
-            .send_to(data.as_bytes(), &target_addr)
-            .expect("failed to send message");
-        for ws_stream in ws_streams.lock().unwrap().iter_mut() {
-            let _ = ws_stream.send(Message::text(data.as_str())).await;
+        for broker in &brokers {
+            broker.broadcast(&data).await;
         }
     }
 }
