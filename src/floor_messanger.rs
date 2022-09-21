@@ -119,8 +119,10 @@ impl FloorModule {
             let mut reader = BufReader::with_capacity(1, port);
             loop {
                 let mut raw_data = String::new();
-                reader.read_line(&mut raw_data).unwrap();
-                queue_ref.lock().unwrap().push_back(raw_data);
+                reader.read_line(&mut raw_data).and_then(|_| {
+                    queue_ref.lock().unwrap().push_back(raw_data);
+                    Ok(())
+                }).unwrap_or_default();
             }
         });
         FloorModule { queue, direction }
