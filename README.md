@@ -15,9 +15,16 @@ cargo run -- replay /Users/tyoshida/Dropbox/sensorium-pj/FloorManager/FloorManag
 ```
 
 ## pipeline
+INPUTS:
+(.dat)            --(`replay`)--  
+(serial ports)    --(`serial`)--                
 
-(.dat)            --(`replay`)--  `floor-broker` -- (`websocket`)
-(serial ports)    --(`serial`)--                 -- (`udp`)
+MAIN:
+`floor-broker`
+
+OUTPUTS: 
+-- (`websocket`)
+-- (`udp`)
 
 
 ## communication
