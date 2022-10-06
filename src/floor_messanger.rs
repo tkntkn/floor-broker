@@ -25,9 +25,10 @@ impl ReplayFloorMessanger {
 impl FloorMessanger for ReplayFloorMessanger {
     fn create_receiver(&self) -> Receiver<String> {
         let (tx, rx) = mpsc::channel();
-        let lines = read_lines(&self.filename);
-        thread::spawn(move || {
+        let filename = String::from(&self.filename);
+        thread::spawn(move || loop {
             let start_epoch = current_epoch();
+            let lines = read_lines(&filename);
             if let Ok(mut lines) = lines {
                 let first_line = lines.next().unwrap().expect("File is not empty");
                 let ShallowParsedData(data_start_epoch, _data) = shallow_parse_data(first_line);

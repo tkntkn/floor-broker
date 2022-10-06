@@ -10,6 +10,7 @@ echo "Creating certification files for $IP"
 echo
 echo "Generating san.txt"
 echo "subjectAltName = DNS:$IP, IP:$IP" > san.txt
+echo "basicConstraints=CA:TRUE" >> san.txt
 
 echo
 echo "Generating server.key and server.csr"

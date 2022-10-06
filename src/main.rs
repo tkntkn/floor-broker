@@ -22,8 +22,8 @@ fn main() {
         .collect::<Vec<String>>();
 
     let brokers: Vec<Box<dyn Broker>> = vec![
-        // Box::new(WebSocketBroker::new(webscoket_addr.to_string())),
-        Box::new(WebSocketSecureBroker::new(webscoket_addr.to_string())),
+        Box::new(WebSocketBroker::new(webscoket_addr.to_string())),
+        // Box::new(WebSocketSecureBroker::new(webscoket_addr.to_string())),
         Box::new(UdpBroker::new(upd_addrs)),
     ];
 
